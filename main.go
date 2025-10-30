@@ -33,8 +33,8 @@ const (
 )
 
 var (
-	logger     *log.Logger
-	logFile    *os.File
+	logger  *log.Logger
+	logFile *os.File
 )
 
 type Release struct {
@@ -78,12 +78,12 @@ func main() {
 	initLogger()
 	defer closeLogger()
 
-	logger.Println("=== Orbit ComfyUI Launcher Started ===")
+	logger.Println("=== Orbit Started ===")
 	logger.Printf("OS: %s, Arch: %s\n", runtime.GOOS, runtime.GOARCH)
 
 	orbitApp := &OrbitApp{}
 	orbitApp.app = app.New()
-	orbitApp.window = orbitApp.app.NewWindow("Orbit - ComfyUI Launcher")
+	orbitApp.window = orbitApp.app.NewWindow("Orbit")
 	orbitApp.window.Resize(fyne.NewSize(700, 550))
 
 	logger.Println("Loading configuration...")
@@ -95,7 +95,7 @@ func main() {
 	logger.Println("Showing main window...")
 	orbitApp.window.ShowAndRun()
 
-	logger.Println("=== Orbit ComfyUI Launcher Closed ===")
+	logger.Println("=== Orbit Closed ===")
 }
 
 // ロガーを初期化
