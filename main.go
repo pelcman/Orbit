@@ -761,15 +761,18 @@ func (o *OrbitApp) startComfyUI(versionDir, version string) {
 			logger.Printf(".ci script detected, using workdir: %s\n", workDir)
 		}
 
-		// 修正: batファイルを直接実行
-		// cmd /c でバッチファイルを実行し、完了後もウィンドウを維持
-		cmd = exec.Command("cmd", "/c", "start", "ComfyUI", "/D", workDir, "cmd", "/c", filepath.Base(absPath), "& pause")
+		// batファイルを新しいコマンドプロンプトウィンドウで実行
+		batFileName := filepath.Base(absPath)
+
+		// 方法1: start コマンドでbatファイルを直接実行
+		cmd = exec.Command("cmd", "/c", "start", "ComfyUI", "/D", workDir, batFileName)
 		cmd.Dir = workDir
 
-		cmdStr := fmt.Sprintf("cmd /c start ComfyUI /D \"%s\" cmd /c %s & pause", workDir, filepath.Base(absPath))
+		cmdStr := fmt.Sprintf("cmd /c start \"ComfyUI\" /D \"%s\" %s", workDir, batFileName)
 		logger.Printf("Executing command: %s\n", cmdStr)
 		logger.Printf("Working directory: %s\n", workDir)
-		o.updateStatus(fmt.Sprintf("Executing: %s", cmdStr))
+		logger.Printf("Batch file path: %s\n", absPath)
+		o.updateStatus(fmt.Sprintf("Starting ComfyUI from: %s", batFileName))
 	} else {
 		// Pythonスクリプトの場合
 		logger.Printf("Executing Python script: %s\n", exePath)
