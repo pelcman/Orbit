@@ -98,6 +98,15 @@ func main() {
 	orbitApp.window.Resize(fyne.NewSize(520, 730))
 	orbitApp.window.SetFixedSize(false)
 
+	// アイコンを設定
+	iconPath := "Img/icon.png"
+	if iconResource, err := fyne.LoadResourceFromPath(iconPath); err == nil {
+		orbitApp.window.SetIcon(iconResource)
+		logger.Printf("Window icon set: %s\n", iconPath)
+	} else {
+		logger.Printf("Failed to load icon: %v\n", err)
+	}
+
 	logger.Println("Loading configuration...")
 	orbitApp.loadConfig()
 
@@ -1503,23 +1512,61 @@ func (o *OrbitApp) runPreProcess(versionDir string) error {
 		}
 
 		// pip install -r requirements.txt を実行
-		cmd := exec.Command(pythonPath, "-m", "pip", "install", "-r", requirementsPath)
-		cmd.Dir = filepath.Dir(requirementsPath)
+		// 絶対パスを取得
+		absPythonPath, _ := filepath.Abs(pythonPath)
+		absRequirementsPath, _ := filepath.Abs(requirementsPath)
+		workDir := filepath.Dir(absRequirementsPath)
 
-		// 新しいウィンドウで実行（ユーザーが進捗を確認できるように）
-		cmdStr := fmt.Sprintf("%s -m pip install -r %s", pythonPath, requirementsPath)
-		logger.Printf("Executing: %s\n", cmdStr)
+		// バッチファイルを一時的に作成して実行
+		tempBatPath := filepath.Join(tempDir, "install_requirements.bat")
+		os.MkdirAll(tempDir, 0755)
 
-		// コマンドプロンプトで実行
-		startCmd := exec.Command("cmd", "/c", "start", "Installing Requirements", "/wait", "cmd", "/c", cmdStr, "& pause")
-		startCmd.Dir = filepath.Dir(requirementsPath)
+		// バッチファイルの内容
+		batContent := fmt.Sprintf(`@echo off
+cd /d "%s"
+"%s" -m pip install -r "%s"
+if errorlevel 1 (
+    echo.
+    echo Installation failed!
+    pause
+    exit /b 1
+) else (
+    echo.
+    echo Installation completed successfully!
+    pause
+    exit /b 0
+)
+`, workDir, absPythonPath, absRequirementsPath)
 
-		if err := startCmd.Run(); err != nil {
+		// バッチファイルを書き込み
+		if err := os.WriteFile(tempBatPath, []byte(batContent), 0644); err != nil {
+			logger.Printf("Failed to create batch file: %v\n", err)
+			return fmt.Errorf("failed to create batch file: %v", err)
+		}
+
+		logger.Printf("Created temporary batch file: %s\n", tempBatPath)
+		logger.Printf("Python path: %s\n", absPythonPath)
+		logger.Printf("Requirements path: %s\n", absRequirementsPath)
+		logger.Printf("Working directory: %s\n", workDir)
+
+		// バッチファイルを実行して完了を待つ
+		cmd := exec.Command("cmd", "/c", tempBatPath)
+		cmd.Dir = workDir
+
+		// 出力をキャプチャ
+		output, err := cmd.CombinedOutput()
+		logger.Printf("Installation output:\n%s\n", string(output))
+
+		// バッチファイルを削除
+		os.Remove(tempBatPath)
+
+		if err != nil {
 			logger.Printf("Failed to install requirements: %v\n", err)
+			o.updateStatus("Requirements installation failed")
 			return fmt.Errorf("failed to install requirements: %v", err)
 		}
 
-		logger.Println("Requirements installation completed")
+		logger.Println("Requirements installation completed successfully")
 		o.updateStatus("Requirements installation completed")
 	}
 
@@ -1678,8 +1725,8 @@ func (o *OrbitApp) startComfyUI(versionDir, version string) {
 		// ポストプロセスの失敗は警告のみ（致命的ではない）
 	}
 
-	o.updateStatus(fmt.Sprintf("ComfyUI %s launched successfully!", version))
-	dialog.ShowInformation("Success", fmt.Sprintf("ComfyUI %s has been launched!", version), o.window)
+	o.updateStatus(fmt.Sprintf("ComfyUI %s launched successfully! (PID: %d)", version, cmd.Process.Pid))
+	logger.Printf("=== ComfyUI %s launched successfully ===\n", version)
 }
 
 func init() {
