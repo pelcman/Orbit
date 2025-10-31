@@ -61,6 +61,7 @@ type Config struct {
 	CustomApps          []CustomApp `json:"custom_apps"`
 	GPUType             string      `json:"gpu_type"`             // "nvidia", "amd", "cpu"
 	InstallRequirements bool        `json:"install_requirements"` // プレプロセス: requirements.txtをインストール
+	InstallPyTorch      bool        `json:"install_pytorch"`      // プレプロセス: PyTorchをインストール
 	RunPreProcess       bool        `json:"run_pre_process"`      // カスタムプレプロセスを実行
 	RunPostProcess      bool        `json:"run_post_process"`     // カスタムポストプロセスを実行
 	PreProcessCommand   string      `json:"pre_process_command"`  // カスタムプレプロセスコマンド
@@ -477,6 +478,13 @@ func (o *OrbitApp) setupModernUI() {
 	})
 	o.installRequirementsChk.SetChecked(o.config.InstallRequirements)
 
+	// プレプロセスオプション: PyTorchインストール
+	installPyTorchChk := widget.NewCheck("Install PyTorch with CUDA", func(checked bool) {
+		o.config.InstallPyTorch = checked
+		o.saveConfig()
+	})
+	installPyTorchChk.SetChecked(o.config.InstallPyTorch)
+
 	optionsCard := container.NewVBox(
 		widget.NewLabel("GPU Type:"),
 		o.gpuSelect,
@@ -484,6 +492,7 @@ func (o *OrbitApp) setupModernUI() {
 		widget.NewSeparator(),
 		widget.NewLabel("Launch Options:"),
 		o.installRequirementsChk,
+		installPyTorchChk,
 	)
 
 	// 左右のカードを横並び（中央揃え）
@@ -1482,6 +1491,96 @@ func (o *OrbitApp) extract7z(archivePath, destDir string) error {
 // プレプロセスを実行
 func (o *OrbitApp) runPreProcess(versionDir string) error {
 	logger.Println("Running pre-process tasks...")
+
+	// PyTorchをインストール（requirements.txtより先に実行）
+	if o.config.InstallPyTorch {
+		logger.Println("Installing PyTorch with CUDA support...")
+		o.updateStatus("Installing PyTorch with CUDA...")
+
+		// Pythonのパスを探す
+		pythonPath := filepath.Join(versionDir, "ComfyUI_windows_portable", "python_embeded", "python.exe")
+		if _, err := os.Stat(pythonPath); os.IsNotExist(err) {
+			// システムのPythonを使用
+			pythonPath = "python"
+			logger.Println("Using system Python for PyTorch installation")
+		} else {
+			logger.Printf("Using embedded Python for PyTorch installation: %s\n", pythonPath)
+		}
+
+		// 絶対パスを取得
+		absPythonPath, _ := filepath.Abs(pythonPath)
+
+		// バッチファイルを一時的に作成して実行
+		tempBatPath := filepath.Join(tempDir, "install_pytorch.bat")
+		os.MkdirAll(tempDir, 0755)
+
+		// PyTorchのインストールコマンド（CUDA 12.1対応）
+		// 公式推奨: https://pytorch.org/get-started/locally/
+		var pipCommand string
+		switch o.config.GPUType {
+		case "nvidia":
+			pipCommand = `"%s" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121`
+		case "amd":
+			// AMD ROCmサポート
+			pipCommand = `"%s" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.7`
+		case "cpu":
+			// CPU版
+			pipCommand = `"%s" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu`
+		default:
+			pipCommand = `"%s" -m pip install torch torchvision torchaudio`
+		}
+
+		// バッチファイルの内容
+		batContent := fmt.Sprintf(`@echo off
+echo ========================================
+echo Installing PyTorch with CUDA Support
+echo ========================================
+echo.
+echo Python: %s
+echo GPU Type: %s
+echo.
+`+pipCommand+`
+echo.
+if errorlevel 1 (
+    echo ========================================
+    echo PyTorch Installation FAILED!
+    echo ========================================
+    echo Please check the error messages above.
+    echo You can close this window when done.
+    echo ========================================
+) else (
+    echo ========================================
+    echo PyTorch Installation COMPLETED!
+    echo ========================================
+    echo You can close this window now.
+    echo ========================================
+)
+echo.
+pause
+`, absPythonPath, strings.ToUpper(o.config.GPUType), absPythonPath)
+
+		// バッチファイルを書き込み
+		if err := os.WriteFile(tempBatPath, []byte(batContent), 0644); err != nil {
+			logger.Printf("Failed to create PyTorch batch file: %v\n", err)
+			return fmt.Errorf("failed to create PyTorch batch file: %v", err)
+		}
+
+		logger.Printf("Created PyTorch installation batch file: %s\n", tempBatPath)
+
+		// バッチファイルを別ウィンドウで実行（同期、完了を待つ）
+		startCmd := exec.Command("cmd", "/c", "start", "/wait", "Installing PyTorch", tempBatPath)
+		if err := startCmd.Run(); err != nil {
+			logger.Printf("Failed to install PyTorch: %v\n", err)
+			os.Remove(tempBatPath)
+			return fmt.Errorf("failed to install PyTorch: %v", err)
+		}
+
+		logger.Println("PyTorch installation completed")
+		o.updateStatus("PyTorch installation completed")
+
+		// バッチファイルを削除
+		os.Remove(tempBatPath)
+	}
 
 	// requirements.txtをインストール
 	if o.config.InstallRequirements {
