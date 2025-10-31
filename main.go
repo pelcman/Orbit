@@ -84,7 +84,8 @@ func main() {
 	orbitApp := &OrbitApp{}
 	orbitApp.app = app.New()
 	orbitApp.window = orbitApp.app.NewWindow("Orbit")
-	orbitApp.window.Resize(fyne.NewSize(700, 550))
+	orbitApp.window.Resize(fyne.NewSize(200, 200))
+	orbitApp.window.SetFixedSize(false)
 
 	logger.Println("Loading configuration...")
 	orbitApp.loadConfig()
@@ -192,7 +193,7 @@ func (o *OrbitApp) setupModernUI() {
 	// === 上部: ロゴ ===
 	banner := canvas.NewImageFromFile("Img/banner.png")
 	banner.FillMode = canvas.ImageFillContain
-	banner.SetMinSize(fyne.NewSize(600, 120))
+	banner.SetMinSize(fyne.NewSize(400, 120))
 
 	// === 左下: バージョン選択とインストール状態 ===
 	o.versionSelect = widget.NewSelect([]string{"Loading..."}, func(value string) {
