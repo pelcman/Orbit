@@ -1642,12 +1642,10 @@ func (o *OrbitApp) startComfyUI(versionDir, version string) {
 		}
 
 		// batファイルを新しいコマンドプロンプトウィンドウで実行（別プロセスとして）
-		// start コマンドで新しいウィンドウを開き、その中でbatファイルを実行
-		// カレントディレクトリを変更してからbatファイルを実行
-		batCommand := fmt.Sprintf(`cd /d "%s" && "%s"`, workDir, absPath)
-		cmd = exec.Command("cmd", "/c", "start", "ComfyUI", "cmd", "/k", batCommand)
+		// より単純なstart構文を使用
+		cmd = exec.Command("cmd", "/c", "start", "/D", workDir, absPath)
 
-		logger.Printf("Executing command: cmd /c start \"ComfyUI\" cmd /k '%s'\n", batCommand)
+		logger.Printf("Executing command: cmd /c start /D \"%s\" \"%s\"\n", workDir, absPath)
 		logger.Printf("Working directory: %s\n", workDir)
 		logger.Printf("Batch file path: %s\n", absPath)
 		o.updateStatus(fmt.Sprintf("Starting ComfyUI from: %s", filepath.Base(absPath)))
