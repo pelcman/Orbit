@@ -1521,22 +1521,36 @@ func (o *OrbitApp) runPreProcess(versionDir string) error {
 		tempBatPath := filepath.Join(tempDir, "install_requirements.bat")
 		os.MkdirAll(tempDir, 0755)
 
-		// バッチファイルの内容
+		// バッチファイルの内容（別ウィンドウで表示、手動で閉じる）
 		batContent := fmt.Sprintf(`@echo off
+echo ========================================
+echo Installing ComfyUI Requirements
+echo ========================================
+echo.
+echo Python: %s
+echo Requirements: %s
+echo Working Directory: %s
+echo.
 cd /d "%s"
 "%s" -m pip install -r "%s"
+echo.
 if errorlevel 1 (
-    echo.
-    echo Installation failed!
-    pause
-    exit /b 1
+    echo ========================================
+    echo Installation FAILED!
+    echo ========================================
+    echo Please check the error messages above.
+    echo You can close this window when done.
+    echo ========================================
 ) else (
-    echo.
-    echo Installation completed successfully!
-    pause
-    exit /b 0
+    echo ========================================
+    echo Installation COMPLETED successfully!
+    echo ========================================
+    echo You can close this window now.
+    echo ========================================
 )
-`, workDir, absPythonPath, absRequirementsPath)
+echo.
+pause
+`, absPythonPath, absRequirementsPath, workDir, workDir, absPythonPath, absRequirementsPath)
 
 		// バッチファイルを書き込み
 		if err := os.WriteFile(tempBatPath, []byte(batContent), 0644); err != nil {
@@ -1549,25 +1563,19 @@ if errorlevel 1 (
 		logger.Printf("Requirements path: %s\n", absRequirementsPath)
 		logger.Printf("Working directory: %s\n", workDir)
 
-		// バッチファイルを実行して完了を待つ
-		cmd := exec.Command("cmd", "/c", tempBatPath)
-		cmd.Dir = workDir
+		// バッチファイルを別ウィンドウで実行（同期、完了を待つ）
+		startCmd := exec.Command("cmd", "/c", "start", "/wait", "Installing Requirements", tempBatPath)
+		if err := startCmd.Run(); err != nil {
+			logger.Printf("Failed to start installation window: %v\n", err)
+			os.Remove(tempBatPath)
+			return fmt.Errorf("failed to start installation window: %v", err)
+		}
 
-		// 出力をキャプチャ
-		output, err := cmd.CombinedOutput()
-		logger.Printf("Installation output:\n%s\n", string(output))
+		logger.Println("Requirements installation completed")
+		o.updateStatus("Requirements installation completed")
 
 		// バッチファイルを削除
 		os.Remove(tempBatPath)
-
-		if err != nil {
-			logger.Printf("Failed to install requirements: %v\n", err)
-			o.updateStatus("Requirements installation failed")
-			return fmt.Errorf("failed to install requirements: %v", err)
-		}
-
-		logger.Println("Requirements installation completed successfully")
-		o.updateStatus("Requirements installation completed")
 	}
 
 	// カスタムプレプロセス
